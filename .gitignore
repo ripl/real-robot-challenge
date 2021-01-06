@@ -1,0 +1,12 @@
+*.deb
+*.sif
+*.pyc
+__pycache__
+.cache
+*.egg-info
+build/
+logs/
+log_manager/logs
+log_manager/sshkey
+log_manager/user.txt
+data/
