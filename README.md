@@ -1,7 +1,13 @@
 Winning Submission of Phase 3 of the 2020 Real Robot Challenge
 ==============================================================
 
+<p align="center">
+  <!-- <img width="250" height="250" src="media/animated.gif"> -->
+  <img width="300" height="300" src="https://imgur.com/z3QSinX.gif">
+</p>
 This repository contains code for the winning submission of Phase 3 of the 2020 [Real Robot Challenge](https://real-robot-challenge.com).
+
+A report detailing our approach can be found [here](http://arxiv.org/abs/2101.02842).
 
 This submission is the joint work of
 [Charles Schaff](https://ttic.uchicago.edu/~cbschaff/),
@@ -9,7 +15,6 @@ This submission is the joint work of
 [Takahiro Maeda](https://github.com/meaten), and
 [Matthew R Walter](https://ttic.uchicago.edu/~mwalter/).
 
-A report detailing our approach can be found [here](ADD ARXIV URL HERE).
 
 This repository is structured as a catkin package and builds on the
 [example package](https://github.com/rr-learning/rrc_example_package) provided by the competition,
@@ -25,7 +30,7 @@ Use the `run_locally.sh` script to build the catkin workspace and run commands
 inside the singularity image.
 For example, to run our controller on a random goal of difficulty 4, use the following command:
 ```bash
-./run_locally.sh /path/to/singularity/image.sh rosrun rrc run_local_episode.py 4
+./run_locally.sh /path/to/singularity/image.sif rosrun rrc run_local_episode.py 4
 ```
 
 

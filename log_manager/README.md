@@ -10,7 +10,7 @@ In order to use this code, you must first add your account information in two fi
 
 2) sshkey: This should contain the ssh private key used to log into the submission system
 
-Account information is provided by the competition organizers.
+**Account information is provided by the competition organizers.**
 
 
 ### Submitting Jobs
@@ -26,7 +26,7 @@ To run multiple, identical jobs in sequence, run `./submit_jobs_in_sequence.sh n
 This code analyzes log data in the following ways:
 - computes the accumulated reward of the episode
 - generates a plot of desired vs actual joint positions of each finger of the TriFinger robot
-- generates a video showing syncronized images from the 3 cameras observing the robot
+- generates a video showing synchronized images from the 3 cameras observing the robot
 - generates a video in which robot and object poses are rendered in pybullet and shown alongside camera images from the above video
 
 Generating the videos requires ffmpeg to be installed with the libvpx codec, although another codec could be used in its place.
