@@ -2,8 +2,7 @@ Winning Submission of Phase 3 of the 2020 Real Robot Challenge
 ==============================================================
 
 <p align="center">
-  <!-- <img width="250" height="250" src="media/animated.gif"> -->
-  <img width="300" height="300" src="https://imgur.com/z3QSinX.gif">
+  <img width="300" height="300" src="https://i.imgur.com/38avOvk.gif">
 </p>
 This repository contains code for the winning submission of Phase 3 of the 2020 [Real Robot Challenge](https://real-robot-challenge.com).
 
