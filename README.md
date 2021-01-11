@@ -39,3 +39,7 @@ For detailed instructions on how to run this code on the robot cluster, see [thi
 
 This repository contains code for automatically submitting jobs and analyzing logs in the [log_manager](https://github.com/ripl-ttic/rrc_phase_3/tree/cleanup/log_manager) directory.
 Note that running jobs on the robot cluster requires an account from the competition organizers.
+
+## Links
+- [Videos (phases 1 - 3)](https://youtube.com/playlist?list=PLBUWL2_ywUvE_czrinTTRqqzNu86mYuOV)
+- [Report](http://arxiv.org/abs/2101.02842)
