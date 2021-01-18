@@ -25,7 +25,7 @@ def execute_grasp_approach(env, obs, grasp):
     return obs, done
 
 
-def get_safe_pregrasp(env, obs, grasp, candidate_margins=[1.3, 1.5, 1.8, 2.0, 2.2]):
+def get_safe_pregrasp(env, obs, grasp, candidate_margins=[1.1, 1.3, 1.5]):
     pregrasp_tip_pos = []
     pregrasp_jconfs = []
     ik_utils = IKUtils(env)

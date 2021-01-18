@@ -5,11 +5,11 @@ from trifinger_simulation.trifinger_platform import TriFingerPlatform
 
 COLLISION_TOLERANCE = 3.5 * 1e-03
 MU = 0.5
-CUBOID_SIZE = move_cube._CUBOID_SIZE
-CUBOID_HALF_SIZE = move_cube._CUBOID_HALF_SIZE
+CUBOID_SIZE = np.array((0.065, 0.065, 0.065))
+CUBOID_HALF_SIZE = CUBOID_SIZE / 2
 CUBOID_MASS = 0.016
-VIRTUAL_CUBOID_HALF_SIZE = move_cube._CUBOID_HALF_SIZE + 0.007
-MIN_HEIGHT = move_cube._min_height
+VIRTUAL_CUBOID_HALF_SIZE = CUBOID_HALF_SIZE + 0.007
+MIN_HEIGHT = min(CUBOID_HALF_SIZE)
 MAX_HEIGHT = move_cube._max_height
 ARENA_RADIUS = move_cube._ARENA_RADIUS
 AVG_POSE_STEPS = 200

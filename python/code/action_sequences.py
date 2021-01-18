@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-from code.utils import frameskip_to, action_type_to, repeat, get_yaw_diff
+from code.utils import frameskip_to, action_type_to, repeat
+from code.align_rotation import get_yaw_diff
 from code.const import TRANSLU_CYAN, CUBOID_SIZE, INIT_JOINT_CONF
-from code.align_rotation import project_cube_xy_plane
 from code.env.cube_env import ActionType
 from scipy.spatial.transform import Rotation as R
 import numpy as np
-import time
 
 
 def complete_keypoints(start, goal, unit_length=0.008):
@@ -69,6 +68,10 @@ class ScriptedActions(object):
         self.add_move(target_tip_positions, 0.004)
 
     def add_release2(self, coef=2.0, min_height=0.01):
+        """
+        'add_release' method requires 'grasp.cube_tip_pos' to calculate target tip positions.
+        However this one calculates the target positions only from current tip positions.
+        """
         tip_pos = self.get_last_tippos()
         center = np.mean(tip_pos, axis=0)
         target_tip_positions = center + (tip_pos - center) * coef
@@ -83,7 +86,7 @@ class ScriptedActions(object):
             0.004
         )
 
-    def add_raise_tips(self, height=CUBOID_SIZE[0] * 2):
+    def add_raise_tips(self, height=CUBOID_SIZE[0] * 1.5):
         target_tip_pos = self.get_last_tippos()
         target_tip_pos[:, 2] = height
         self.add_move(target_tip_pos, 0.004)
@@ -92,7 +95,7 @@ class ScriptedActions(object):
         if self.get_last_tippos()[:, 2].min() < CUBOID_SIZE[0] / 2:
             print('Warning: adding heuristic pregrasp even though robot_tip postiion is low')
         above_target_tip_positions = np.copy(pregrasp_tip_pos)
-        above_target_tip_positions[:, 2] = CUBOID_SIZE[0] * 2
+        above_target_tip_positions[:, 2] = CUBOID_SIZE[0] * 1.5
         self.add_move(above_target_tip_positions, 0.004)
         self.add_move(pregrasp_tip_pos, 0.004)
 
@@ -108,7 +111,7 @@ class ScriptedActions(object):
 
         # rotate cube
         rotate_step = np.sign(rotate_angle) * np.pi / 30
-        rot = R.from_euler(rotate_axis, rotate_step)
+        rot = R.from_rotvec(rotate_axis * rotate_step)
         print(f'add_pitch_rotation: rotate_axis {rotate_axis}\trotate_angle {rotate_angle}')
         for _ in range(int(rotate_angle / rotate_step)):
             orientation = (R.from_quat(self.grasp.quat) * rot).as_quat()
@@ -194,7 +197,7 @@ if __name__ == '__main__':
     from trifinger_simulation.tasks import move_cube
     from code.grasping import get_heuristic_grasp, get_pitching_grasp
     from code.grasping import get_yawing_grasp, execute_grasp_approach
-    from code.align_rotation import pitch_rotation_axis_and_angle
+    from code.align_rotation import roll_and_pitch_aligned
 
     env = make_training_env(move_cube.sample_goal(-1).to_dict(), 3,
                             reward_fn='competition_reward',
@@ -222,22 +225,21 @@ if __name__ == '__main__':
     obs, done = action_sequence.execute_motion(3, 5, 10)
 
     # pitch rotation
-    grasp = get_pitching_grasp(env, obs['object_position'],
-                               obs['object_orientation'],
-                               obs['goal_object_orientation'])
-    obs, done = execute_grasp_approach(env, obs, grasp)
-    action_sequence = ScriptedActions(env, obs['robot_tip_positions'], grasp)
-    action_sequence.add_grasp(coef=0.6)
-    rotate_axis, rotate_angle = pitch_rotation_axis_and_angle(grasp.cube_tip_pos)
-    action_sequence.add_pitch_rotation(0.045, rotate_axis, rotate_angle,
-                                       coef=0.6)
-    action_sequence.add_release()
-    obs, done = action_sequence.execute_motion(3, 5, 10)
+    if not roll_and_pitch_aligned(obs['object_orientation'], obs['goal_object_orientation']):
+        grasp, axis, angle = get_pitching_grasp(env, obs['object_position'],
+                                                obs['object_orientation'],
+                                                obs['goal_object_orientation'])
+        obs, done = execute_grasp_approach(env, obs, grasp)
+        action_sequence = ScriptedActions(env, obs['robot_tip_positions'], grasp)
+        action_sequence.add_grasp(coef=0.6)
+        action_sequence.add_pitch_rotation(0.045, axis, angle, coef=0.6)
+        action_sequence.add_release()
+        obs, done = action_sequence.execute_motion(3, 5, 10)
 
     # yaw rotation
-    grasp = get_yawing_grasp(env, obs['object_position'],
-                             obs['object_orientation'],
-                             obs['goal_object_orientation'])
+    grasp, path = get_yawing_grasp(env, obs['object_position'],
+                                   obs['object_orientation'],
+                                   obs['goal_object_orientation'])
     obs, done = execute_grasp_approach(env, obs, grasp)
 
     action_sequence = ScriptedActions(env, obs['robot_tip_positions'], grasp)

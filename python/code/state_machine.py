@@ -1,8 +1,9 @@
 from code.env.cube_env import ActionType
 from code.const import INIT_JOINT_CONF, CONTRACTED_JOINT_CONF, AVG_POSE_STEPS
 from code.utils import action_type_to, frameskip_to, Transform
-from code.utils import get_yaw_diff, estimate_object_pose, get_rotation_between_vecs
+from code.utils import estimate_object_pose, get_rotation_between_vecs
 from code.action_sequences import ScriptedActions
+from code.align_rotation import roll_and_pitch_aligned, get_yaw_diff
 from code import grasping, base_policies
 from enum import Enum, auto
 from scipy.spatial.transform import Rotation
@@ -14,7 +15,8 @@ class State(Enum):
     GO_TO_INIT_POSITION = auto()
     RUN_INITIAL_MANIPULATIONS = auto()
     MOVE_TO_CENTER = auto()
-    ADJUST_ORIENTATION = auto()
+    ADJUST_ROLL_PITCH_ORIENTATION = auto()
+    ADJUST_YAW_ORIENTATION = auto()
     EXECUTE_POLICY = auto()
 
 
@@ -52,11 +54,12 @@ class TriFingerStateMachine(object):
             # RUN_INITIAL_MANIPULATIONS
             ##################
             elif self.state == State.RUN_INITIAL_MANIPULATIONS:
-                print('adjust_ori_count', self.adjust_ori_count)
                 if not self.object_centered():
                     self.state = State.MOVE_TO_CENTER
-                elif self.adjust_ori_count < 2 and not self.object_oriented() and self.difficulty == 4:
-                    self.state = State.ADJUST_ORIENTATION
+                elif not self.object_roll_and_pitch_oriented() and self.difficulty == 4:
+                    self.state = State.ADJUST_ROLL_PITCH_ORIENTATION
+                elif not self.object_yaw_oriented() and self.difficulty == 4:
+                    self.state = State.ADJUST_YAW_ORIENTATION
                 else:
                     self.state = State.EXECUTE_POLICY
 
@@ -77,7 +80,7 @@ class TriFingerStateMachine(object):
                     )
                     action_sequence.add_grasp(coef=0.6)
                     action_sequence.add_move_to_center(coef=0.6)
-                    action_sequence.add_release(4.0)
+                    action_sequence.add_release(2.0)
                     action_sequence.add_raise_tips(height=0.08)
                     self.obs, self.done = action_sequence.execute_motion(
                         frameskip=2,
@@ -88,15 +91,43 @@ class TriFingerStateMachine(object):
                     self.state = State.GO_TO_INIT_POSITION
 
             ##################
-            # ADJUST_ORIENTATION
+            # ADJUST_ROLL_PITCH_ORIENTATION
             ##################
-            elif self.state == State.ADJUST_ORIENTATION:
+            elif self.state == State.ADJUST_ROLL_PITCH_ORIENTATION:
+                grasp, pitch_axis, pitch_angle = self.get_pitching_grasp(execute=True)
+                if grasp is None:
+                    print("Can't get grasp for yawing motion... moving to execute policy")
+                    self.state = State.MOVE_TO_CENTER
+                else:
+                    action_sequence = ScriptedActions(
+                        self.env, self.obs['robot_tip_positions'], grasp
+                    )
+                    action_sequence.add_grasp(coef=0.6)
+                    pitch_angle = np.sign(pitch_angle) * np.pi / 2
+                    action_sequence.add_pitch_rotation(
+                        height=0.045,
+                        rotate_axis=pitch_axis,
+                        rotate_angle=pitch_angle,
+                        coef=0.6)
+                    action_sequence.add_release()
+                    action_sequence.add_raise_tips()
+                    self.obs, self.done = action_sequence.execute_motion(
+                        frameskip=2,
+                        action_repeat=6,
+                        action_repeat_end=10
+                    )
+                    self.wait_for(10 if self.env.simulation else 300)
+                    self.state = State.RUN_INITIAL_MANIPULATIONS
+
+            ##################
+            # ADJUST_YAW_ORIENTATION
+            ##################
+            elif self.state == State.ADJUST_YAW_ORIENTATION:
                 grasp, path = self.get_yawing_grasp(execute=True)
                 if grasp is None:
                     print("Can't get grasp for yawing motion... moving to execute policy")
                     self.state = State.MOVE_TO_CENTER
                 else:
-
                     pi = self.make_base_policy(grasp, path, adjust_tip=False, action_repeat=4)
                     while not self.done and not pi.at_end_of_sequence(pi._step):
                         action = pi(self.obs)
@@ -106,7 +137,7 @@ class TriFingerStateMachine(object):
                     action_sequence = ScriptedActions(
                         self.env, self.obs['robot_tip_positions'], grasp
                     )
-                    action_sequence.add_release2(3.0)
+                    action_sequence.add_release2(1.5)
                     action_sequence.add_raise_tips(height=0.08)
                     self.obs, self.done = action_sequence.execute_motion(
                         frameskip=2,
@@ -116,7 +147,6 @@ class TriFingerStateMachine(object):
 
                     self.wait_for(10 if self.env.simulation else 100)
                     self.state = State.RUN_INITIAL_MANIPULATIONS
-                    self.adjust_ori_count += 1
 
             ##################
             # EXECUTE_POLICY
@@ -158,12 +188,17 @@ class TriFingerStateMachine(object):
 
         return self.grasp_check_failed_count < 5
 
-    def object_oriented(self):
-        # calculate second (long) axis of object cuboid and goal cuboid
+    def object_yaw_oriented(self):
         return np.abs(get_yaw_diff(
             self.obs['object_orientation'],
             self.obs['goal_object_orientation'])
         ) < np.pi / 4
+
+    def object_roll_and_pitch_oriented(self):
+        return roll_and_pitch_aligned(
+            self.obs['object_orientation'],
+            self.obs['goal_object_orientation']
+        )
 
     def object_centered(self):
         dist_from_center = np.linalg.norm(
@@ -171,7 +206,7 @@ class TriFingerStateMachine(object):
         )
         return dist_from_center < 0.07
 
-    def get_yawing_grasp(self, execute=True, avg_pose=True):
+    def get_yawing_grasp(self, execute=True, avg_pose=False):
         if avg_pose:
             obj_pos, obj_ori, self.obs, self.done = estimate_object_pose(
                 self.env, self.obs, steps=AVG_POSE_STEPS
@@ -210,7 +245,38 @@ class TriFingerStateMachine(object):
 
         return None, None
 
-    def get_partial_grasp(self, execute=True, avg_pose=True):
+    def get_pitching_grasp(self, execute=True, avg_pose=False):
+        if avg_pose:
+            obj_pos, obj_ori, self.obs, self.done = estimate_object_pose(
+                self.env, self.obs, steps=AVG_POSE_STEPS
+            )
+        else:
+            obj_pos = self.obs['object_position']
+            obj_ori = self.obs['object_orientation']
+
+        grasp, pitch_axis, pitch_angle = grasping.get_pitching_grasp(
+            self.env, obj_pos, obj_ori, self.obs['goal_object_orientation']
+        )
+
+        if grasp is None:
+            print("Pitching grasp failed...")
+            return None, pitch_axis, pitch_angle
+
+        try:
+            if execute:
+                self.obs, self.done = grasping.execute_grasp_approach(
+                    self.env, self.obs, grasp
+                )
+        except RuntimeError:
+            print("Pregrasp motion failed...")
+            return None, pitch_axis, pitch_angle
+
+        self.env.unwrapped.register_custom_log('target_object_pose', {'position': obj_pos, 'orientation': obj_ori})
+        self.env.unwrapped.register_custom_log('target_tip_pos', grasp.T_cube_to_base(grasp.cube_tip_pos))
+        self.env.unwrapped.save_custom_logs()
+        return grasp, pitch_axis, pitch_angle
+
+    def get_partial_grasp(self, execute=True, avg_pose=False):
         """
         sample a 'partial' grasp for object centering
         NOTE: Only use it for centering the object.
@@ -255,7 +321,7 @@ class TriFingerStateMachine(object):
         return grasp
 
 
-    def get_heuristic_grasp(self, execute=True, avg_pose=True):
+    def get_heuristic_grasp(self, execute=True, avg_pose=False):
         if avg_pose:
             obj_pos, obj_ori, self.obs, self.done = estimate_object_pose(
                 self.env, self.obs, steps=AVG_POSE_STEPS
@@ -300,7 +366,7 @@ class TriFingerStateMachine(object):
             self.env.unwrapped.save_custom_logs()
         return grasp
 
-    def get_planned_grasp(self, execute=True, avg_pose=True):
+    def get_planned_grasp(self, execute=True, avg_pose=False):
         if avg_pose:
             obj_pos, obj_ori, self.obs, self.done = estimate_object_pose(
                 self.env, self.obs, steps=AVG_POSE_STEPS
@@ -309,18 +375,13 @@ class TriFingerStateMachine(object):
             obj_pos = self.obs['object_position']
             obj_ori = self.obs['object_orientation']
 
-        goal_ori = self.get_closest_pitch_angle()
-        if self.env.visualization:
-            self.env.cube_viz.goal_viz.set_state(
-                self.obs['goal_object_position'], goal_ori
-            )
         try:
             grasp, path = grasping.get_planned_grasp(
                 self.env,
                 obj_pos,
                 obj_ori,
                 self.obs['goal_object_position'],
-                goal_ori,
+                self.obs['goal_object_orientation'],
                 tight=True,
                 use_rrt=True,
                 use_ori=self.difficulty == 4

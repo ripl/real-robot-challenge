@@ -1,7 +1,8 @@
 from code.grasping.grasp_sampling import GraspSampler
 from code.grasping.wholebody_planning import WholeBodyPlanner
 from code.const import VIRTUAL_CUBOID_HALF_SIZE
-from code.align_rotation import align_z, project_cube_xy_plane
+from code.utils import keep_state
+import code.align_rotation as rot_util
 from scipy.spatial.transform import Rotation as R
 import copy
 import numpy as np
@@ -10,7 +11,7 @@ import numpy as np
 def get_heuristic_grasp(env, pos, quat):
     sampler = GraspSampler(env, pos, quat)
     try:
-        return sampler.get_heuristic_grasps().__next__()
+        return sampler.get_heuristic_grasps()[0]
     except StopIteration:
         return sampler()
 
@@ -44,32 +45,33 @@ def get_planned_grasp(env, pos, quat, goal_pos, goal_quat, tight=False,
 
 
 def get_pitching_grasp(env, pos, quat, goal_quat):
-    _, pitch_axis, pitch_angle = align_z(
-        quat, project_cube_xy_plane(goal_quat)
-    )
-    x = np.asarray([VIRTUAL_CUBOID_HALF_SIZE[0], 0, 0])
-    y = np.asarray([0, VIRTUAL_CUBOID_HALF_SIZE[1], 0])
-    if pitch_angle > 0 and pitch_axis == 'x':
-        cube_tip_positions = np.asarray([x,  y, -x])
-    elif pitch_angle > 0 and pitch_axis == 'y':
-        cube_tip_positions = np.asarray([y, -x, -y])
-    elif pitch_angle < 0 and pitch_axis == 'x':
-        cube_tip_positions = np.asarray([x, -y, -x])
-    elif pitch_angle < 0 and pitch_axis == 'y':
-        cube_tip_positions = np.asarray([y,  x, -y])
-    else:
-        return get_yawing_grasp(env, pos, quat, goal_quat)
+    axis, angle = rot_util.get_roll_pitch_axis_and_angle(quat, goal_quat)
+    vert, _ = rot_util.get_most_vertical_axis(quat)
+    turning_axis = np.cross(vert, axis)
+
+    cube_tip_positions = np.asarray([
+        VIRTUAL_CUBOID_HALF_SIZE * axis,
+        VIRTUAL_CUBOID_HALF_SIZE * turning_axis * np.sign(angle),
+        VIRTUAL_CUBOID_HALF_SIZE * -axis,
+    ])
 
     grasp_sampler = GraspSampler(env, pos, quat)
-    return grasp_sampler.get_feasible_grasps_from_tips(
-        grasp_sampler.T_cube_to_base(cube_tip_positions)
-    ).__next__()
+    with keep_state(env):
+        try:
+            return grasp_sampler.get_feasible_grasps_from_tips(
+                grasp_sampler.T_cube_to_base(cube_tip_positions)
+            ).__next__(), axis, angle
+
+        except StopIteration:
+            grasp_sampler = GraspSampler(env, pos, quat, ignore_collision=True)
+            return grasp_sampler.get_feasible_grasps_from_tips(
+                grasp_sampler.T_cube_to_base(cube_tip_positions)
+            ).__next__(), axis, angle
 
 
 def get_yawing_grasp(env, pos, quat, goal_quat, step_angle=np.pi / 2):
-    from code.utils import get_yaw_diff
+    from code.align_rotation import get_yaw_diff
     from code.const import COLLISION_TOLERANCE
-    from scipy.spatial.transform import Rotation
     print("[get_yawing_grasp] step_angle:", step_angle * 180 / np.pi)
     angle = get_yaw_diff(quat, goal_quat)
     print('[get_yawing_grasp] get_yaw_diff:', angle * 180 / np.pi)

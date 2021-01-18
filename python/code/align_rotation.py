@@ -2,27 +2,19 @@ import numpy as np
 from scipy.spatial.transform import Rotation as R
 
 
-def project_cube_xy_plane(orientation):
-    rot = R.from_quat(orientation)
+def get_most_vertical_axis(orientation):
     axes = np.eye(3)
-    axes_rotated = rot.apply(axes)
+    axes_in_base_frame = R.from_quat(orientation).apply(axes)
+    z = axes_in_base_frame[:, 2]  # dot product with z axis
+    ind = np.argmax(np.abs(z))
+    sign = np.sign(z[ind])
+    return sign * axes[ind], sign * axes_in_base_frame[ind]
 
-    # calculate the angle between each rotated axis and xy plane
-    cos = axes_rotated[:, 2]  # dot product with z_axis
 
-    # choose the nearest axis to z_axis
-    # HACK
-    # CANT CHOOSE THE SECOND AXIS FOR THE CUBOID
-    # IF YOU DO IT THE CUBOID STANDS UPRIGHT, WHICH WON'T HAPPEN ON THE REAL ROBOT
-    idx = np.argmax(np.abs(cos)[np.array([0, 2])])
-    if idx == 1:
-        idx = 2
-    sign = np.sign(cos[idx])
-
-    # calculate align rotation
-    rot_align = vector_align_rotation(axes_rotated[idx], sign * axes[2])
-
-    return (rot_align * rot).as_quat()
+def project_cube_xy_plane(orientation):
+    ax_cube_frame, ax_base_frame = get_most_vertical_axis(orientation)
+    rot_align = vector_align_rotation(ax_base_frame, np.array([0, 0, 1]))
+    return (rot_align * R.from_quat(orientation)).as_quat()
 
 
 def vector_align_rotation(a, b):
@@ -66,82 +58,35 @@ def vector_align_rotation(a, b):
     return rot
 
 
-def pitch_rotation_times(cube_orientation, goal_orientation):
+def roll_and_pitch_aligned(cube_orientation, goal_orientation):
+    ax_cube, _ = get_most_vertical_axis(cube_orientation)
+    ax_goal, _ = get_most_vertical_axis(goal_orientation)
+    return np.allclose(ax_cube, ax_goal)
+
+
+def get_yaw_diff(ori, goal_ori):
+    assert roll_and_pitch_aligned(ori, goal_ori)
+    proj_goal_ori = project_cube_xy_plane(goal_ori)
+    rot = R.from_quat(proj_goal_ori) * R.from_quat(ori).inv()
+    return rot.as_rotvec()[2]
+
+
+def get_roll_pitch_axis_and_angle(cube_orientation, goal_orientation):
+    if roll_and_pitch_aligned(cube_orientation, goal_orientation):
+        return None, None
     rot_cube = R.from_quat(cube_orientation)
-    rot_goal = R.from_quat(goal_orientation)
+    rot_goal = R.from_quat(project_cube_xy_plane(goal_orientation))
+    ax_up_cube, _ = get_most_vertical_axis(cube_orientation)
 
-    rot = rot_goal * rot_cube.inv()
+    diffs = []
+    axis_angles = []
+    for i, axis in enumerate(np.eye(3)):
+        if ax_up_cube[i] != 0:
+            continue
+        for angle in [np.pi / 2, -np.pi / 2]:
+            rot_align = R.from_rotvec(axis * angle)
+            rot_diff = (rot_goal * (rot_cube * rot_align).inv()).magnitude()
+            diffs.append(rot_diff)
+            axis_angles.append((axis, angle))
 
-    z_axis = np.array([0, 0, 1])
-
-    z_axis_rotated = rot.apply(z_axis)
-
-    cos_z = z_axis.dot(z_axis_rotated)
-
-    if cos_z > np.cos(np.pi / 4):
-        return 0
-    elif cos_z > np.cos(np.pi * 3 / 4):
-        return 1
-    else:
-        return 2
-
-
-def align_z(cube_orientation, projected_goal_orientation):
-    pitch_times = pitch_rotation_times(cube_orientation,
-                                       projected_goal_orientation)
-    rot = R.from_quat(projected_goal_orientation)
-    rot_cube = R.from_quat(cube_orientation)
-
-    if pitch_times == 0:
-        return rot.as_quat(), 'z', 0
-
-    if pitch_times == 1:
-        axes = ['x', 'x', 'y', 'y']
-        angles = [np.pi / 2, -np.pi / 2, np.pi / 2, -np.pi / 2]
-
-        rot_aligns = [R.from_euler(axis, angle)
-                      for axis, angle in zip(axes, angles)]
-        rot_diff = [(rot * rot_align * rot_cube.inv())
-                    for rot_align in rot_aligns]
-        expmap = [rot.as_rotvec() for rot in rot_diff]
-        norm_expmap_xy = [np.linalg.norm(vec[:2]) for vec in expmap]
-
-        idx = np.argmin(norm_expmap_xy)
-
-        return (rot * rot_aligns[idx]).as_quat(), axes[idx], -angles[idx]
-
-    if pitch_times == 2:
-        axes = ['x', 'y']
-
-        rot_aligns = [R.from_euler(axis, np.pi) for axis in axes]
-        diff_mag = [(rot * rot_align * rot_cube.inv()).magnitude()
-                    for rot_align in rot_aligns]
-
-        idx = np.argmin(diff_mag)
-
-        return (rot * rot_aligns[idx]).as_quat(), axes[idx], np.pi
-
-
-def pitch_rotation_axis_and_angle(cube_tip_positions):
-    margin = 0.3  # rotate a bit more than 90 degrees.
-    x_mean = np.mean(np.abs(cube_tip_positions[:, 0]))
-    y_mean = np.mean(np.abs(cube_tip_positions[:, 1]))
-    if x_mean > y_mean:
-        rotate_axis = "x"
-    else:
-        rotate_axis = "y"
-
-    if rotate_axis == "x":
-        idx = np.argmax(np.abs(cube_tip_positions[:, 1]))
-        if cube_tip_positions[idx, 1] > 0:
-            rotate_angle = np.pi / 2 * (1 + margin)
-        else:
-            rotate_angle = -np.pi / 2 * (1 + margin)
-    else:
-        idx = np.argmax(np.abs(cube_tip_positions[:, 0]))
-        if cube_tip_positions[idx, 0] > 0:
-            rotate_angle = -np.pi / 2 * (1 + margin)
-        else:
-            rotate_angle = np.pi / 2 * (1 + margin)
-
-    return rotate_axis, rotate_angle
+    return axis_angles[np.argmin(diffs)]

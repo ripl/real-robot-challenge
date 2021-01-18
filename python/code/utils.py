@@ -3,6 +3,7 @@ import numpy as np
 import pybullet as p
 from scipy.spatial.transform import Rotation
 import time
+from code.align_rotation import get_yaw_diff
 
 
 def set_seed(seed=0):
@@ -435,21 +436,6 @@ def estimate_object_pose(env, obs, steps):
     est_quat = target_quats[np.argmin(errors)]
     print('esimated quat: ', est_quat)
     return est_pos, est_quat, obs, done
-
-
-def get_yaw_diff(ori, goal_ori):
-    # calculate second (long) axis of object cuboid and goal cuboid
-    long_axis = np.array([0, 1, 0])
-    object_long_axis = Rotation.from_quat(ori).apply(long_axis)
-    goal_long_axis = Rotation.from_quat(goal_ori).apply(long_axis)
-    projection = np.array([1, 1, 0])
-    quat = get_rotation_between_vecs(object_long_axis * projection,
-                                     goal_long_axis * projection)
-    # return the z axis of rotvec (should be [0, 0, angle])
-    rot = Rotation.from_quat(quat)
-    if np.isclose(rot.magnitude(), np.pi, atol=1e-3):
-        return np.pi
-    return rot.as_rotvec()[2]
 
 
 class SphereMarker:

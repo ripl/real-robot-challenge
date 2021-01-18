@@ -1,4 +1,4 @@
-"""Gym environment for the Real Robot Challenge Phase 1 (Simulation)."""
+"""Gym environment for the Real Robot Challenge Phase 2."""
 import os
 import enum
 import shelve
@@ -9,7 +9,6 @@ import numpy as np
 import robot_interfaces
 import robot_fingers
 import trifinger_simulation
-import trifinger_simulation.visual_objects
 from trifinger_simulation import trifingerpro_limits
 from trifinger_simulation.tasks import move_cube
 from code.const import CUSTOM_LOGDIR, INIT_JOINT_CONF, CUBOID_SIZE, CUBOID_MASS
@@ -17,7 +16,7 @@ import pybullet as p
 
 from .reward_fns import competition_reward
 from .pinocchio_utils import PinocchioUtils
-from .viz import Viz
+from .viz import Viz, CuboidMarker
 import time
 
 
@@ -322,7 +321,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
                          mass=CUBOID_MASS)
         # visualize the goal
         if self.visualization:
-            self.goal_marker = trifinger_simulation.visual_objects.CuboidMarker(
+            self.goal_marker = CuboidMarker(
                 size=CUBOID_SIZE,
                 position=self.goal["position"],
                 orientation=self.goal["orientation"],

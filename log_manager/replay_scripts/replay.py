@@ -222,78 +222,6 @@ class VideoRecorder:
         out.release()
 
 
-class CustomDrawer:
-    def __init__(self, custom_log_path):
-        self.custom_log = load_data(custom_log_path)
-        self.info = {}
-        self.vis_tip_pos = []
-        self.vis_object = []
-        self.vis_timesteps = set()
-        self.preprocess()
-        self._visualized = []
-
-    def preprocess(self):
-        if "target_object_pose" in self.custom_log:
-            self.info["object"] = {}
-            for log in self.custom_log["target_object_pose"]:
-                self.info["object"][int(log["step_count"])] = {
-                    "position": log["data"]["position"],
-                    "orientation": log["data"]["orientation"],
-                }
-                self.vis_timesteps.add(int(log["step_count"]))
-
-        if "target_tip_pos" in self.custom_log:
-            self.info["tip_pos"] = {}
-            for log in self.custom_log["target_tip_pos"]:
-                self.info["tip_pos"][int(log["step_count"])] = log["data"]
-                self.vis_timesteps.add(int(log["step_count"]))
-        print('vis_timesteps:', self.vis_timesteps)
-
-
-    def _update_object(self, pose):
-        position = pose['position']
-        orientation = pose['orientation']
-        if not self.vis_object:
-            marker_cube_ori = VisualCubeOrientation(position, orientation)
-            cuboid = visual_objects.CuboidMarker(
-                size=move_cube._CUBOID_SIZE,
-                position=position,
-                orientation=orientation,
-                color=(1, 0, 0, 0.5)
-                # pybullet_client_id=platform.simfinger._pybullet_client_id,
-            )
-            self.vis_object = (marker_cube_ori, cuboid)
-        else:
-            marker_cube_ori, cuboid = self.vis_object
-            marker_cube_ori.set_state(position, orientation)
-            cuboid.set_state(position, orientation)
-
-    def _update_tip_marker(self, positions):
-        self.vis_tip_pos = []
-        for pos in positions:
-            self.vis_tip_pos.append(
-                SphereMarker(
-                    radius=0.015, position=pos, color=(0, 0, 1, 0.8)
-                )
-            )
-
-    def draw(self, timestep):
-        margin = 10000
-        print('timestep:', timestep)
-        for step in self.vis_timesteps:
-            if step - margin < timestep and step not in self._visualized:
-                self._visualized.append(step)
-                print('self._visualized:', self._visualized)
-                print('visualizing step:', step)
-                print('self.vis_timesteps:', self.vis_timesteps)
-                if 'object' in self.info:
-                    pose = self.info['object'][step]
-                    self._update_object(pose)
-                if 'tip_pos' in self.info:
-                    positions = self.info['tip_pos'][step]
-                    self._update_tip_marker(positions)
-
-
 def get_synced_log_data(logdir, goal, difficulty):
     log = robot_fingers.TriFingerPlatformLog(os.path.join(logdir, "robot_data.dat"),
                                              os.path.join(logdir, "camera_data.dat"))
@@ -347,7 +275,6 @@ def vstack_frames(frames):
     return np.concatenate(padded_frames, axis=0)
 
 def main(logdir, video_path):
-    custom_drawer = CustomDrawer(os.path.join(logdir, 'user/custom_data'))
     goal, difficulty = get_goal(logdir)
     data = get_synced_log_data(logdir, goal, difficulty)
     fps = len(data['t']) / (data['stamp'][-1] - data['stamp'][0])
@@ -365,63 +292,11 @@ def main(logdir, video_path):
                                             data['cube'][0].orientation)
     marker_goal_ori = VisualCubeOrientation(goal['position'], goal['orientation'])
 
-    visual_objects.CuboidMarker(
-        size=move_cube._CUBOID_SIZE,
+    visual_objects.CubeMarker(
+        width=0.065,
         position=goal['position'],
-        orientation=goal['orientation'],
-        pybullet_client_id=platform.simfinger._pybullet_client_id,
+        orientation=goal['orientation']
     )
-    # if 'grasp_target_cube_pose' in custom_log:
-    #     markers.append(
-    #         visual_objects.CubeMarker(
-    #             width=0.065,
-    #             position=custom_log['grasp_target_cube_pose']['position'],
-    #             orientation=custom_log['grasp_target_cube_pose']['orientation'],
-    #             color=(0, 0, 1, 0.5),
-    #             pybullet_client_id=platform.simfinger._pybullet_client_id,
-    #         )
-    #     )
-    # if 'pregrasp_tip_positions' in custom_log:
-    #     for tip_pos in custom_log['pregrasp_tip_positions']:
-    #         print(tip_pos)
-
-#         markers.append(
-    #             SphereMarker(
-    #                 radius=0.015,
-    #                 position=tip_pos,
-    #                 color=(0, 1, 1, 0.5)
-    #             )
-    #         )
-    # if 'failure_target_tip_positions' in custom_log:
-    #     for tip_pos in custom_log['failure_target_tip_positions']:
-    #         print(tip_pos)
-    #         markers.append(
-    #             SphereMarker(
-    #                 radius=0.015,
-    #                 position=tip_pos,
-    #                 color=(1, 0, 0, 0.5)
-    #             )
-    #         )
-    # if 'pitch_grasp_positions' in custom_log:
-    #     for tip_pos in custom_log['pitch_grasp_positions']:
-    #         print(tip_pos)
-    #         markers.append(
-    #             SphereMarker(
-    #                 radius=0.015,
-    #                 position=tip_pos,
-    #                 color=(1, 1, 1, 0.5)
-    #             )
-    #         )
-    # if 'yaw_grasp_positions' in custom_log:
-    #     for tip_pos in custom_log['yaw_grasp_positions']:
-    #         print(tip_pos)
-    #         markers.append(
-    #             SphereMarker(
-    #                 radius=0.015,
-    #                 position=tip_pos,
-    #                 color=(0, 0, 0, 0.5)
-    #             )
-    #         )
 
     p.configureDebugVisualizer(p.COV_ENABLE_GUI, 0)
     p.resetDebugVisualizerCamera(cameraDistance=0.6, cameraYaw=0, cameraPitch=-40, cameraTargetPosition=[0,0,0])
@@ -430,7 +305,6 @@ def main(logdir, video_path):
         platform.simfinger.reset_finger_positions_and_velocities(data['desired_action'][i].position)
         platform.cube.set_state(data['cube'][i].position, data['cube'][i].orientation)
         marker_cube_ori.set_state(data['cube'][i].position, data['cube'][i].orientation)
-        custom_drawer.draw(t)
         frame_desired = video_recorder.get_views()
         frame_desired = cv2.cvtColor(frame_desired, cv2.COLOR_RGB2BGR)
         platform.simfinger.reset_finger_positions_and_velocities(data['robot'][i].position)

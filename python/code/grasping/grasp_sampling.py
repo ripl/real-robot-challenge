@@ -27,7 +27,8 @@ class Grasp(object):
         self.base_tip_pos = self.T_cube_to_base(self.cube_tip_pos)
 
 
-def sample(ax, sign, half_size, shrink_region=[0.0, 0.6, 0.0]):
+def sample(ax, sign, half_size=VIRTUAL_CUBOID_HALF_SIZE,
+           shrink_region=[0.6, 0.6, 0.6]):
     point = np.empty(3)
     for i in range(3):
         if i == ax:
@@ -38,37 +39,13 @@ def sample(ax, sign, half_size, shrink_region=[0.0, 0.6, 0.0]):
     return point
 
 
-def sample_side_face(n, half_size, object_ori, shrink_region=[0.0, 0.6, 0.0]):
+def sample_side_face(n, half_size, object_ori, shrink_region=[0.6, 0.6, 0.6]):
     R_base_to_cube = Transform(np.zeros(3), object_ori).inverse()
     z_cube = R_base_to_cube(np.array([0, 0, 1]))
     axis = np.argmax(np.abs(z_cube))
     sample_ax = np.array([i for i in range(3) if i != axis])
     points = np.stack([
         sample(np.random.choice(sample_ax), np.random.choice([-1, 1]),
-               half_size, shrink_region)
-        for _ in range(n)
-    ])
-    return points
-
-
-def sample_long_side_face(n, half_size, object_ori, shrink_region=[0.0, 0.6, 0.0]):
-    '''sample from long side faces.
-    long side face == x-axis or z-axis in the cube frame
-    '''
-    # check if z-axis (cube-frame) is in parralel with z-axis in base-frame
-    R_cube_to_base = Transform(np.zeros(3), object_ori)
-    base_z = R_cube_to_base(np.array([0, 0, 1]))
-
-    if np.argmax(np.abs(base_z)) == 2:
-        # z-axis (cube-frame) is in parallel with z-axis in base-frame
-        # --> sample from x-axis face
-        axis = 0
-    else:
-        # z-axis (cube-frame) is in parallel with the floor
-        # --> sample from z-axis face
-        axis = 2
-    points = np.stack([
-        sample(axis, np.random.choice([-1, 1]),
                half_size, shrink_region)
         for _ in range(n)
     ])
@@ -87,24 +64,6 @@ def get_side_face_centers(half_size, object_ori):
     return np.array(points)
 
 
-def get_long_side_face_centers(half_size, object_ori):
-    # check if z-axis (cube-frame) is in parralel with z-axis in base-frame
-    R_cube_to_base = Transform(np.zeros(3), object_ori)
-    base_z = R_cube_to_base(np.array([0, 0, 1]))
-
-    if np.argmax(np.abs(base_z)) == 2:
-        # z-axis (cube-frame) is in parallel with z-axis in base-frame
-        # --> sample from x-axis face
-        axis = 0
-    else:
-        # z-axis (cube-frame) is in parallel with the floor
-        # --> sample from z-axis face
-        axis = 2
-    points = [sample(axis, sign, half_size, np.zeros(3)) for sign in [-1, 1]]
-    vertical_points = [sample(1, sign, half_size, np.zeros(3)) for sign in [-1, 1]]  # TEMP
-    return np.array(points), np.array(vertical_points)
-
-
 def get_three_sided_heuristic_grasps(half_size, object_ori):
     points = get_side_face_centers(half_size, object_ori)
     grasps = []
@@ -115,196 +74,36 @@ def get_three_sided_heuristic_grasps(half_size, object_ori):
 
 def get_two_sided_heurictic_grasps(half_size, object_ori):
     side_centers = get_side_face_centers(half_size, object_ori)
-    tip_to_center = 0.20
     ax1 = side_centers[1] - side_centers[0]
     ax2 = side_centers[3] - side_centers[2]
     g1 = np.array([
         side_centers[0],
-        side_centers[1] + tip_to_center * ax2,
-        side_centers[1] - tip_to_center * ax2,
+        side_centers[1] + 0.15 * ax2,
+        side_centers[1] - 0.15 * ax2,
     ])
     g2 = np.array([
         side_centers[1],
-        side_centers[0] + tip_to_center * ax2,
-        side_centers[0] - tip_to_center * ax2,
+        side_centers[0] + 0.15 * ax2,
+        side_centers[0] - 0.15 * ax2,
     ])
     g3 = np.array([
         side_centers[2],
-        side_centers[3] + tip_to_center * ax1,
-        side_centers[3] - tip_to_center * ax1,
+        side_centers[3] + 0.15 * ax1,
+        side_centers[3] - 0.15 * ax1,
     ])
     g4 = np.array([
         side_centers[3],
-        side_centers[2] + tip_to_center * ax1,
-        side_centers[2] - tip_to_center * ax1,
+        side_centers[2] + 0.15 * ax1,
+        side_centers[2] - 0.15 * ax1,
     ])
     return [g1, g2, g3, g4]
 
 
-
-def get_two_sided_long_face_heuristic_grasps(half_size, object_ori, tip_to_center=0.2):
-    """
-    sample a grasp from long side faces
-    """
-    long_side_centers, vcenters = get_long_side_face_centers(half_size, object_ori)
-    ax1 = long_side_centers[1] - long_side_centers[0]
-    ax2 = vcenters[1] - vcenters[0]
-    g1 = np.array([
-        long_side_centers[0],
-        long_side_centers[1] + tip_to_center * ax2,
-        long_side_centers[1] - tip_to_center * ax2,
-    ])
-    g2 = np.array([
-        long_side_centers[1],
-        long_side_centers[0] + tip_to_center * ax2,
-        long_side_centers[0] - tip_to_center * ax2,
-    ])
-    return [g1, g2]
-
-def get_tiny_faces_heuristic_grasps(half_size, object_ori):
-    R_base_to_cube = Transform(np.zeros(3), object_ori).inverse()
-    z_cube = R_base_to_cube(np.array([0, 0, 1]))
-    axis = np.argmax(np.abs(z_cube))
-    above_point = []
-    for i in range(3):
-        if i == axis:
-            above_point.append(half_size[i] + 0.02)
-        else:
-            above_point.append(0)
-
-    point = np.stack([
-        [0, half_size[1], 0],
-        [0, -half_size[1], 0],
-        above_point
-    ])
-    return [point]
-
-
-def get_two_long_one_tiny_heuristic_grasps(half_size, object_ori):
-    side_centers = get_side_face_centers(half_size, object_ori)
-    ax2 = side_centers[3] - side_centers[2]
-    tip_to_center=0.20
-    g1 = np.array([
-        side_centers[0] + tip_to_center * ax2,
-        side_centers[1] + tip_to_center * ax2,
-        [0, half_size[1], 0]
-    ])
-
-    g2 = np.array([
-        side_centers[0] - tip_to_center * ax2,
-        side_centers[1] - tip_to_center * ax2,
-        [0, -half_size[1], 0]
-    ])
-
-    return [g1, g2]
-
-
-def get_clockwise_two_finger_yawing_grasp(half_size, object_ori):
-    R_base_to_cube = Transform(np.zeros(3), object_ori).inverse()
-    z_cube = R_base_to_cube(np.array([0, 0, 1]))
-    axis = np.argmax(np.abs(z_cube))
-    above_point = []
-    for i in range(3):
-        if i == axis:
-            above_point.append(half_size[i] + 0.02)
-        else:
-            above_point.append(0)
-
-    side_centers = get_side_face_centers(half_size, object_ori)
-    tip_to_center = 0.20
-    ax1 = side_centers[1] - side_centers[0]
-    ax2 = side_centers[3] - side_centers[2]
-
-    g1 = np.array([
-        side_centers[0] - tip_to_center * ax2,
-        side_centers[1] + tip_to_center * ax2,
-        above_point
-    ])
-    g2 = np.array([
-        side_centers[0] + tip_to_center * ax2,
-        side_centers[1] - tip_to_center * ax2,
-        above_point
-    ])
-    return [g1, g2]
-    # return [g1]
-
-
-def get_anticlockwise_two_finger_yawing_grasp(half_size, object_ori):
-    R_base_to_cube = Transform(np.zeros(3), object_ori).inverse()
-    z_cube = R_base_to_cube(np.array([0, 0, 1]))
-    axis = np.argmax(np.abs(z_cube))
-    above_point = []
-    for i in range(3):
-        if i == axis:
-            above_point.append(half_size[i] + 0.02)
-        else:
-            above_point.append(0)
-
-    side_centers = get_side_face_centers(half_size, object_ori)
-    tip_to_center = 0.20
-    ax1 = side_centers[1] - side_centers[0]
-    ax2 = side_centers[3] - side_centers[2]
-    g1 = np.array([
-        side_centers[0] - tip_to_center * ax2,
-        side_centers[1] + tip_to_center * ax2,
-        above_point
-    ])
-    g2 = np.array([
-        side_centers[0] + tip_to_center * ax2,
-        side_centers[1] - tip_to_center * ax2,
-        above_point
-    ])
-    # return [g1, g2]
-    # return [g2]
-
-    point = np.stack([
-        #[0, half_size[1], 0],
-        #[0, -half_size[1], 0],
-        side_centers[0],
-        side_centers[1],
-        above_point
-    ])
-
-    return [point]
-
-
-def get_all_heuristic_grasps(half_size, object_ori, avoid_edge_faces=True, yawing_grasp=False, is_level_1=False):
-    # return get_tiny_faces_heuristic_grasps(half_size, object_ori)
-    """
-    if yawing_grasp and clockwise:
-        return (
-            get_clockwise_two_finger_yawing_grasp(half_size, object_ori)
-        )
-    elif yawing_grasp and not clockwise:
-        return (
-            get_anticlockwise_two_finger_yawing_grasp(half_size, object_ori)
-        )
-    """
-    if yawing_grasp:
-        return (
-            get_two_sided_long_face_heuristic_grasps(half_size, object_ori, tip_to_center=0.25)
-            + get_two_sided_long_face_heuristic_grasps(half_size, object_ori, tip_to_center=0.28)
-            + get_two_sided_long_face_heuristic_grasps(half_size, object_ori, tip_to_center=0.20)
-            # + get_anticlockwise_two_finger_yawing_grasp(half_size, object_ori)
-        )
-    else:
-        if avoid_edge_faces:  # This one is ued for mpfc motion planning to carry the ojbect
-            if is_level_1:
-                tip_to_center = 0.20
-            else:
-                tip_to_center = 0.25
-
-            return (
-                get_two_sided_long_face_heuristic_grasps(half_size, object_ori, tip_to_center=tip_to_center)
-                # get_two_sided_heurictic_grasps(half_size, object_ori)
-                # + get_three_sided_heuristic_grasps(half_size, object_ori)
-            )
-        return (
-            get_two_sided_heurictic_grasps(half_size, object_ori)
-            + get_three_sided_heuristic_grasps(half_size, object_ori)
-            + get_anticlockwise_two_finger_yawing_grasp(half_size, object_ori)
-            # + get_tiny_faces_heuristic_grasps(half_size, object_ori)
-        )
+def get_all_heuristic_grasps(half_size, object_ori):
+    return (
+        get_three_sided_heuristic_grasps(half_size, object_ori)
+        + get_two_sided_heurictic_grasps(half_size, object_ori)
+    )
 
 
 class GraspSampler(object):
@@ -389,8 +188,8 @@ class GraspSampler(object):
         with keep_state(self.env):
             while retry < max_retries:
                 print('[GraspSampler] retry count:', retry)
-                points = sample_long_side_face(3, self.halfsize, self.object_ori,
-                                               shrink_region=shrink_region)
+                points = sample_side_face(3, self.halfsize, self.object_ori,
+                                          shrink_region=shrink_region)
                 tips = self.T_cube_to_base(points)
                 for grasp in self.get_feasible_grasps_from_tips(tips):
                     return grasp
@@ -401,9 +200,6 @@ class GraspSampler(object):
     def get_heuristic_grasps(self):
         grasps = get_all_heuristic_grasps(
             self.halfsize, self.object_ori,
-            avoid_edge_faces=self.avoid_edge_faces,
-            yawing_grasp=self.yawing_grasp,
-            is_level_1=self.env.info['difficulty'] == 1
         )
         ret = []
         with keep_state(self.env):

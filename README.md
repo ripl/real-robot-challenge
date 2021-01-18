@@ -1,6 +1,8 @@
 Winning Submission of Phase 3 of the 2020 Real Robot Challenge
 ==============================================================
 
+**This branch contains a version of our Phase 3 submission that solves the tasks with the cube object from Phase 2 of the competition.**
+
 <p align="center">
   <img width="300" height="300" src="https://i.imgur.com/38avOvk.gif">
 </p>
@@ -22,6 +24,9 @@ and [this planning library](https://github.com/yijiangh/pybullet_planning).
 
 
 ## Running the code in simulation
+
+**Make sure to download the Phase 2 image**
+
 To run the code locally, first install [Singularity](https://sylabs.io/guides/3.5/user-guide/quick_start.html)
 and download this [singularity image](https://people.tuebingen.mpg.de/felixwidmaier/realrobotchallenge/robot_phase/singularity.html#singularity-download-image)
 from the competition. No custom dependencies are required.
