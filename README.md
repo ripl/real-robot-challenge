@@ -1,7 +1,7 @@
 Winning Submission of Phase 3 of the 2020 Real Robot Challenge
 ==============================================================
 
-**This branch contains a version of our Phase 3 submission that solves the tasks with the cube object from Phase 2 of the competition.**
+**This branch contains a version of our Phase 3 submission that solves the tasks with the cube object from Phase 2 of the competition. This code is slightly different from our submission to Phase 2 of the competition.**
 
 <p align="center">
   <img width="300" height="300" src="https://i.imgur.com/7Nbowfm.gif">
